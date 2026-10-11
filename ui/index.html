@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en" class="paper-a4 orient-portrait is-booting">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>BarCode Anywhere</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,650&family=Figtree:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css?v=16" />
+</head>
+<body>
+  <!-- Scan mode (Ctrl+Shift+B) -->
+  <main class="dialog view" id="viewScan">
+    <header class="top no-print">
+      <p class="hint">Ctrl+Shift+B · Esc to hide · one barcode per line</p>
+      <button type="button" class="close" data-hide aria-label="Close">×</button>
+    </header>
+
+    <p class="meta" id="scanMeta"></p>
+    <p class="warn" id="scanWarn" hidden></p>
+    <p class="error" id="scanError" hidden></p>
+    <div class="list" id="scanList"></div>
+  </main>
+
+  <!-- Print mode (Ctrl+Shift+P) -->
+  <main class="print-app view" id="viewPrint" hidden>
+    <header class="print-chrome no-print">
+      <div class="print-brand">
+        <p class="print-kicker">Print layout</p>
+        <h1 class="print-title" id="printMeta">Your sheet</h1>
+      </div>
+      <div class="print-chrome-actions">
+        <button type="button" class="btn ghost" id="importBtn">Import</button>
+        <button type="button" class="btn ghost" data-hide>Hide</button>
+        <button type="button" class="btn primary" id="printBtn">
+          <span>Print</span>
+          <span class="btn-key">Ctrl+P</span>
+        </button>
+      </div>
+    </header>
+
+    <section class="print-toolbar no-print">
+      <div class="tool-group grow">
+        <span class="tool-label">Page title</span>
+        <input type="text" class="toolbar-input" id="pageTitleInput" placeholder="Optional title on each page" />
+      </div>
+
+      <div class="tool-group">
+        <span class="tool-label">Paper</span>
+        <select id="paperSelect" class="paper-select">
+          <option value="a4" selected>A4</option>
+          <option value="zebra105">105 × 250 mm (Zebra)</option>
+        </select>
+      </div>
+
+      <div class="tool-group">
+        <span class="tool-label">Orientation</span>
+        <div class="segmented" role="group" aria-label="Orientation">
+          <button type="button" class="seg is-active" data-orient="portrait">Portrait</button>
+          <button type="button" class="seg" data-orient="landscape">Landscape</button>
+        </div>
+        <select id="orientSelect" class="sr-only" aria-hidden="true" tabindex="-1">
+          <option value="portrait" selected>Portrait</option>
+          <option value="landscape">Landscape</option>
+        </select>
+      </div>
+
+      <div class="tool-group" id="columnsGroup">
+        <span class="tool-label">Columns</span>
+        <div class="segmented" role="group" aria-label="Columns">
+          <button type="button" class="seg" data-columns="1">1</button>
+          <button type="button" class="seg is-active" data-columns="2">2</button>
+          <button type="button" class="seg" data-columns="3">3</button>
+          <button type="button" class="seg" data-columns="4">4</button>
+        </div>
+        <select id="columnsSelect" class="sr-only" aria-hidden="true" tabindex="-1">
+          <option value="1">1</option>
+          <option value="2" selected>2</option>
+          <option value="3">3</option>
+          <option value="4">4</option>
+        </select>
+      </div>
+
+      <div class="tool-group">
+        <span class="tool-label">Per page</span>
+        <div class="stepper">
+          <button type="button" class="stepper-btn" id="perPageDown" aria-label="Fewer per page">−</button>
+          <input type="number" id="perPageInput" min="1" max="40" value="8" />
+          <button type="button" class="stepper-btn" id="perPageUp" aria-label="More per page">+</button>
+        </div>
+      </div>
+
+      <label class="tool-toggle">
+        <input type="checkbox" id="showTitlesToggle" />
+        <span>Barcode titles</span>
+      </label>
+
+      <label class="tool-toggle">
+        <input type="checkbox" id="vCenterToggle" />
+        <span>Center vertically</span>
+      </label>
+
+      <div class="tool-group">
+        <span class="tool-label">Size</span>
+        <div class="segmented" role="group" aria-label="Barcode size">
+          <button type="button" class="seg is-active" data-size="normal">Fixed</button>
+          <button type="button" class="seg" data-size="semi">Semi-fit</button>
+          <button type="button" class="seg" data-size="fit">Fit to paper</button>
+        </div>
+        <select id="sizeModeSelect" class="sr-only" aria-hidden="true" tabindex="-1">
+          <option value="normal" selected>Fixed</option>
+          <option value="semi">Semi-fit</option>
+          <option value="fit">Fit to paper</option>
+        </select>
+      </div>
+
+      <p class="page-pill" id="pageCount">0 pages</p>
+    </section>
+
+    <section class="print-toolbar secondary no-print">
+      <div class="tool-group grow">
+        <span class="tool-label">Footer</span>
+        <input type="text" class="toolbar-input" id="footerInput" value="BarCode Anywhere - Anton" />
+      </div>
+      <p class="paper-hint" id="paperHint"></p>
+    </section>
+
+    <div class="print-body">
+      <aside class="editor no-print">
+        <div class="editor-head">
+          <h2 class="editor-title">Codes</h2>
+          <p class="editor-sub">Import a list, or add codes one by one. Drag to reorder.</p>
+        </div>
+        <div class="editor-list" id="editorList"></div>
+        <div class="editor-foot">
+          <button type="button" class="add-row" id="addBtn">+ Add another code</button>
+          <button type="button" class="text-btn" id="clearBtn">Clear all</button>
+        </div>
+      </aside>
+
+      <section class="preview-wrap">
+        <div class="preview-head no-print">
+          <span class="preview-label">Live preview</span>
+          <span class="preview-tip">What you print is what you see</span>
+        </div>
+        <div class="preview" id="preview"></div>
+      </section>
+    </div>
+  </main>
+
+  <!-- Import dialog -->
+  <div class="modal no-print" id="importModal" hidden>
+    <div class="modal-backdrop" data-import-close></div>
+    <div class="modal-card" role="dialog" aria-labelledby="importHeading">
+      <header class="modal-head">
+        <div>
+          <p class="modal-kicker">Import</p>
+          <h2 id="importHeading">Paste your codes</h2>
+        </div>
+        <button type="button" class="close" data-import-close aria-label="Close">×</button>
+      </header>
+      <p class="modal-help">
+        One barcode per line. Optional:
+        <code>Title | CODE</code> or <code>Title[Tab]CODE</code>.
+      </p>
+      <textarea id="importText" rows="12" placeholder="Damaged return | SKU-1001&#10;Wrong item | SKU-1002&#10;SKU-1003"></textarea>
+      <label class="tool-toggle modal-toggle">
+        <input type="checkbox" id="importReplaceToggle" checked />
+        <span>Replace current list</span>
+      </label>
+      <footer class="modal-actions">
+        <button type="button" class="btn ghost" data-import-close>Cancel</button>
+        <button type="button" class="btn primary" id="importApplyBtn">Add to sheet</button>
+      </footer>
+    </div>
+  </div>
+
+  <script src="vendor/JsBarcode.code128.min.js"></script>
+  <script src="app.js?v=16"></script>
+</body>
+</html>

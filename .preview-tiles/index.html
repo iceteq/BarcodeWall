@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Tile treatments</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,560&family=Figtree:wght@500;600&family=IBM+Plex+Mono:wght@500&display=swap" rel="stylesheet" />
+  <style>
+    * { box-sizing: border-box; }
+    html, body { margin: 0; background: #d7d2c8; }
+    body {
+      font-family: Figtree, "Segoe UI", sans-serif;
+      color: #1c1915;
+      padding: 28px;
+    }
+    h1 {
+      margin: 0 0 6px;
+      font-family: Fraunces, Georgia, serif;
+      font-size: 28px;
+      font-weight: 560;
+    }
+    .lead { margin: 0 0 22px; color: #4a453e; font-size: 15px; }
+    .board {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 22px;
+      max-width: 1180px;
+    }
+    .option { display: flex; flex-direction: column; gap: 8px; }
+    .option-name {
+      margin: 0;
+      font-size: 13px;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: #3d3832;
+    }
+    .option-note { margin: 0; font-size: 14px; color: #4a453e; }
+    .sheet {
+      background: #fff;
+      width: 100%;
+      padding: 16px 18px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .sheet-title {
+      margin: 0;
+      font-family: Fraunces, Georgia, serif;
+      font-size: 16px;
+      font-weight: 560;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 18px 16px;
+    }
+    .cell {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      padding: 8px 8px 7px;
+      min-height: 132px;
+      border-radius: 4px;
+    }
+    .cell-title {
+      margin: 0;
+      font-size: 13px;
+      font-weight: 600;
+      text-align: center;
+      color: #1c1915;
+    }
+    .bars {
+      height: 62px;
+      width: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .bars svg { height: 100%; width: auto; max-width: 100%; display: block; }
+    .label {
+      margin: 0;
+      font-family: "IBM Plex Mono", ui-monospace, monospace;
+      font-size: 11px;
+      letter-spacing: 0.04em;
+      color: #6e675e;
+      text-align: center;
+    }
+    .foot {
+      display: flex;
+      justify-content: space-between;
+      font-size: 10px;
+      color: #8a8378;
+      font-family: "IBM Plex Mono", ui-monospace, monospace;
+    }
+    .now .cell { background: #f6f1e8; }
+    .open .cell { background: transparent; }
+    .frame .cell {
+      background: #fff;
+      border: 1px solid #c8c2b8;
+    }
+    .rule .cell { background: transparent; }
+    .rule .label {
+      border-bottom: 1px solid #1c1915;
+      padding-bottom: 3px;
+      min-width: 72%;
+    }
+  </style>
+</head>
+<body>
+  <h1>Printer-friendly tiles</h1>
+  <p class="lead">Same codes, same size. Only the tile changes. Cream is what prints today.</p>
+  <div class="board">
+    <section class="option" id="opt-now">
+      <p class="option-name">A · Now</p>
+      <p class="option-note">Warm fill behind every code. This is the ink on the page.</p>
+      <article class="sheet now" data-shot="now"></article>
+    </section>
+    <section class="option" id="opt-open">
+      <p class="option-name">B · Open</p>
+      <p class="option-note">No fill and no box. The paper stays white.</p>
+      <article class="sheet open" data-shot="open"></article>
+    </section>
+    <section class="option" id="opt-frame">
+      <p class="option-name">C · Frame</p>
+      <p class="option-note">White inside a thin gray line. The line is the only extra ink.</p>
+      <article class="sheet frame" data-shot="frame"></article>
+    </section>
+    <section class="option" id="opt-rule">
+      <p class="option-name">D · Rule</p>
+      <p class="option-note">No box. A short black line sits under the code text.</p>
+      <article class="sheet rule" data-shot="rule"></article>
+    </section>
+  </div>
+  <script src="../ui/vendor/JsBarcode.code128.min.js"></script>
+  <script>
+    const items = [
+      { title: "Blue widget", text: "WIDGET-4401" },
+      { title: "Large spare", text: "WIDGET-4401-BLUE" },
+      { title: "Bin", text: "BIN-18" },
+      { title: "Return", text: "SKU-1003" },
+    ];
+    function moduleWidth(len) {
+      const modules = Math.max(40, 11 * (len + 3) + 2);
+      const col = 78;
+      const maxAcross = (col / 22) * 100;
+      return Math.max(0.55, Math.min(2.1, Math.round((maxAcross / modules) * 100) / 100));
+    }
+    function fill(sheet) {
+      const title = document.createElement("p");
+      title.className = "sheet-title";
+      title.textContent = "Shelf A";
+      const grid = document.createElement("div");
+      grid.className = "grid";
+      items.forEach((item) => {
+        const cell = document.createElement("div");
+        cell.className = "cell";
+        const t = document.createElement("p");
+        t.className = "cell-title";
+        t.textContent = item.title;
+        const bars = document.createElement("div");
+        bars.className = "bars";
+        const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+        bars.appendChild(svg);
+        const label = document.createElement("p");
+        label.className = "label";
+        label.textContent = item.text;
+        cell.append(t, bars, label);
+        grid.appendChild(cell);
+        JsBarcode(svg, item.text, {
+          format: "CODE128",
+          displayValue: false,
+          margin: 2,
+          height: 100,
+          width: moduleWidth(item.text.length),
+          background: "transparent",
+          lineColor: "#111111",
+        });
+        svg.setAttribute("preserveAspectRatio", "xMidYMid meet");
+      });
+      const foot = document.createElement("div");
+      foot.className = "foot";
+      foot.innerHTML = "<span>Warehouse</span><span>11 Oct 2026 · 1 / 1</span>";
+      sheet.append(title, grid, foot);
+    }
+    document.querySelectorAll(".sheet").forEach(fill);
+  </script>
+</body>
+</html>
