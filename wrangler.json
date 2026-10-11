@@ -1,0 +1,8 @@
+{
+  "name": "bcwall",
+  "compatibility_date": "2026-10-11",
+  "workers_dev": true,
+  "assets": {
+    "directory": "./ui"
+  }
+}
