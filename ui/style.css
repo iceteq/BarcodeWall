@@ -230,12 +230,13 @@ body {
   display: flex;
   justify-content: center;
   align-items: center;
-  overflow: hidden;
+  overflow-x: auto;
 }
 
 .row-barcode svg {
-  max-width: 100%;
+  max-width: none;
   height: auto;
+  flex: none;
 }
 
 .row.is-error {
@@ -742,6 +743,11 @@ body {
 .preview-tip {
   font-size: 12px;
   color: rgba(28, 25, 21, 0.45);
+}
+
+.preview-tip.is-warn {
+  color: var(--err);
+  font-weight: 650;
 }
 
 .preview {

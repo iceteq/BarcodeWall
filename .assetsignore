@@ -1,0 +1,7 @@
+.edge-app-profile
+.git
+.wrangler
+.preview-tiles
+server
+*.ahk
+Run.bat

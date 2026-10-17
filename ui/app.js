@@ -1,6 +1,8 @@
 (() => {
-  const MAX_CHARS = 48;
   const MAX_SCAN_LINES = 25;
+  // Narrowest bar worth printing. Thinner than this, scanners miss.
+  const MIN_MODULE_MM = 0.25;
+  const PX_TO_MM = 25.4 / 96;
   const CODE128_MIN = 32;
   const CODE128_MAX = 126;
   const API_MODE = location.protocol === "http:" || location.protocol === "https:";
@@ -34,6 +36,7 @@
   const paperHint = document.getElementById("paperHint");
   const editorList = document.getElementById("editorList");
   const previewEl = document.getElementById("preview");
+  const previewTip = document.getElementById("previewTip");
   const addBtn = document.getElementById("addBtn");
   const clearBtn = document.getElementById("clearBtn");
 
@@ -132,22 +135,7 @@
       };
     }
 
-    let value = line;
-    let truncated = false;
-    if (value.length > MAX_CHARS) {
-      truncated = true;
-      value = value.slice(0, MAX_CHARS);
-    }
-
-    return {
-      ok: true,
-      label: line,
-      value,
-      truncated,
-      warning: truncated
-        ? `Using first ${MAX_CHARS} of ${line.length} characters.`
-        : "",
-    };
+    return { ok: true, label: line, value: line };
   }
 
   function setMode(mode) {
@@ -332,17 +320,8 @@
 
     const meta = document.createElement("p");
     meta.className = "row-meta";
-    meta.textContent = item.truncated
-      ? `${item.value.length} of ${item.label.length} chars · Code 128`
-      : `${item.value.length} char${item.value.length === 1 ? "" : "s"} · Code 128`;
+    meta.textContent = `${item.value.length} char${item.value.length === 1 ? "" : "s"} · Code 128`;
     row.appendChild(meta);
-
-    if (item.warning) {
-      const warn = document.createElement("p");
-      warn.className = "row-warn";
-      warn.textContent = item.warning;
-      row.appendChild(warn);
-    }
 
     const wrap = document.createElement("div");
     wrap.className = "row-barcode";
@@ -354,9 +333,9 @@
       JsBarcode(svg, item.value, {
         format: "CODE128",
         displayValue: false,
-        margin: 8,
-        height: 60,
-        width: barcodeWidth(item.value.length),
+        margin: 16,
+        height: 64,
+        width: 1.6,
         background: "#ffffff",
         lineColor: "#1c1915",
       });
@@ -418,7 +397,30 @@
       scanWarn.textContent = globalWarnings.join(" ");
     }
 
-    items.forEach((item) => scanList.appendChild(buildScanRow(item)));
+    let tooLong = 0;
+    items.forEach((item) => {
+      const row = buildScanRow(item);
+      scanList.appendChild(row);
+      const wrap = row.querySelector(".row-barcode");
+      if (!wrap || wrap.clientWidth <= 0) return;
+      if (wrap.scrollWidth > wrap.clientWidth + 2) {
+        tooLong += 1;
+        wrap.remove();
+        row.classList.add("is-error");
+        const fail = document.createElement("p");
+        fail.className = "row-error";
+        fail.textContent = "Too long to scan in this window.";
+        row.appendChild(fail);
+      }
+    });
+    if (tooLong) {
+      const ready = okCount - tooLong;
+      scanMeta.textContent = ready
+        ? `${ready} ready · ${tooLong} too long for this window`
+        : tooLong === 1
+          ? "Too long to scan in this window."
+          : `${tooLong} lines are too long to scan in this window.`;
+    }
   }
 
   // —— Print mode ——
@@ -440,7 +442,105 @@
     const col = (pageW - pad - gap * (columns - 1)) / columns - 8;
     const maxModulesAcross = (col / Math.max(barMm, 12)) * 100;
     const w = Math.min(2.1, maxModulesAcross / modules);
-    return Math.max(0.55, Math.round(w * 100) / 100);
+    return Math.max(0.2, Math.round(w * 100) / 100);
+  }
+
+  function cellInnerWidthMm(columns, paper, landscape, mode) {
+    const pageW = paper === "zebra105" ? (landscape ? 250 : 105) : landscape ? 297 : 210;
+    const pagePad = paper === "zebra105" ? 14 : 24;
+    const spread = mode === "fit" || mode === "semi";
+    let gap = 8;
+    if (spread) gap = paper === "zebra105" ? 6 : 10;
+    else if (paper === "zebra105") gap = 5;
+    else if (columns >= 4) gap = 5;
+    else if (columns >= 3) gap = 6;
+    const cellPad = spread ? 5 : paper === "zebra105" ? 2 : 7;
+    const inner = pageW - pagePad;
+    return (inner - gap * Math.max(0, columns - 1)) / columns - cellPad;
+  }
+
+  function moduleWidthMm(len, columns, landscape, paper, mode, layoutCount) {
+    const rows = Math.max(1, Math.ceil(layoutCount / Math.max(1, columns)));
+    const spread = mode === "fit" || mode === "semi";
+    const size = barcodeSizeForPage(layoutCount, columns, landscape, paper, mode, len);
+    const marginPx = paper === "zebra105" ? 2 : columns >= 3 ? 2 : 4;
+    const barMm = spread ? wallBarHeightMm(rows, mode, paper, landscape) : 0;
+    const modulePx = spread
+      ? spreadModuleWidth(len, columns, barMm, paper, landscape)
+      : size.width;
+    const barHeightPx = spread ? 100 : size.height;
+    const cellMm = cellInnerWidthMm(columns, paper, landscape, mode);
+    const modules = 11 * (len + 3) + 2;
+    const svgW = modules * modulePx + marginPx * 2;
+    const svgH = Math.max(1, barHeightPx);
+    if (!(svgW > 0) || !(modulePx > 0)) return 0;
+    if (spread && barMm > 0) {
+      const widthAtHeight = barMm * (svgW / svgH);
+      const shown = Math.min(cellMm, widthAtHeight);
+      return (shown / svgW) * modulePx;
+    }
+    const scale = Math.min(1, cellMm / (svgW * PX_TO_MM));
+    return modulePx * scale * PX_TO_MM;
+  }
+
+  function layoutSnapshot() {
+    const usable = printItems.filter((item) => item.text.trim()).length;
+    return {
+      columns: getColumns(),
+      landscape: getOrientation() === "landscape",
+      paper: getPaper(),
+      mode: getSizeMode(),
+      count: Math.max(1, Math.min(getPerPage(), Math.max(usable, 1))),
+    };
+  }
+
+  function sheetProblem(value) {
+    const box = layoutSnapshot();
+    const mm = moduleWidthMm(value.length, box.columns, box.landscape, box.paper, box.mode, box.count);
+    return mm < MIN_MODULE_MM ? "Too small to scan on this sheet." : "";
+  }
+
+  function codeProblem(text) {
+    const trimmed = String(text ?? "").trim();
+    if (!trimmed) return "";
+    const encoded = encodeLine(trimmed);
+    if (!encoded.ok) return encoded.message;
+    return sheetProblem(encoded.value);
+  }
+
+  function syncEditorProblems() {
+    if (!editorList) return;
+    editorList.querySelectorAll(".edit-row").forEach((row) => {
+      const input = row.querySelector(".edit-code");
+      const hint = row.querySelector(".edit-hint");
+      const mini = row.querySelector(".edit-mini");
+      if (!input || !hint) return;
+      const problem = codeProblem(input.value);
+      hint.textContent = problem;
+      row.classList.toggle("is-bad", !!problem);
+      if (!mini) return;
+      const trimmed = input.value.trim();
+      const encoded = trimmed ? encodeLine(trimmed) : null;
+      const show = !!(encoded && encoded.ok && !problem);
+      mini.classList.toggle("is-empty", !show);
+      mini.innerHTML = "";
+      if (!show) return;
+      const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+      mini.appendChild(svg);
+      renderMini(svg, encoded.value);
+    });
+  }
+
+  function setPreviewTip(tooSmallCount) {
+    if (!previewTip) return;
+    if (tooSmallCount > 0) {
+      previewTip.textContent =
+        "Some barcodes are too small to scan. Use fewer columns, or a shorter code.";
+      previewTip.classList.add("is-warn");
+      return;
+    }
+    previewTip.textContent = "What you print is what you see";
+    previewTip.classList.remove("is-warn");
   }
 
   function wallBarHeightMm(rows, mode, paper, landscape) {
@@ -591,8 +691,9 @@
       const trimmed = item.text.trim();
       const encoded = trimmed ? encodeLine(trimmed) : null;
 
+      const problem = codeProblem(item.text);
       const row = document.createElement("div");
-      row.className = "edit-row" + (encoded && !encoded.ok ? " is-bad" : "");
+      row.className = "edit-row" + (problem ? " is-bad" : "");
       row.dataset.id = String(item.id);
       row.draggable = true;
       row.style.animationDelay = `${Math.min(index, 12) * 28}ms`;
@@ -645,10 +746,11 @@
         item.text = input.value;
         const nextTrim = item.text.trim();
         const next = nextTrim ? encodeLine(nextTrim) : null;
-        row.classList.toggle("is-bad", !!(next && !next.ok));
-        hint.textContent = next && !next.ok ? next.message : next && next.warning ? next.warning : "";
-        mini.classList.toggle("is-empty", !(next && next.ok));
-        if (next && next.ok) {
+        const problem = codeProblem(item.text);
+        row.classList.toggle("is-bad", !!problem);
+        hint.textContent = problem;
+        mini.classList.toggle("is-empty", !(next && next.ok && !problem));
+        if (next && next.ok && !problem) {
           mini.innerHTML = "";
           const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
           mini.appendChild(svg);
@@ -680,8 +782,8 @@
       main.appendChild(input);
 
       const mini = document.createElement("div");
-      mini.className = "edit-mini" + (encoded && encoded.ok ? "" : " is-empty");
-      if (encoded && encoded.ok) {
+      mini.className = "edit-mini" + (encoded && encoded.ok && !problem ? "" : " is-empty");
+      if (encoded && encoded.ok && !problem) {
         const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
         mini.appendChild(svg);
         renderMini(svg, encoded.value);
@@ -690,8 +792,7 @@
 
       const hint = document.createElement("p");
       hint.className = "edit-hint";
-      if (encoded && !encoded.ok) hint.textContent = encoded.message;
-      else if (encoded && encoded.warning) hint.textContent = encoded.warning;
+      if (problem) hint.textContent = problem;
       main.appendChild(hint);
 
       row.appendChild(main);
@@ -804,6 +905,8 @@
       empty.className = "preview-empty";
       empty.textContent = "Click Import to paste a list — or add codes on the left.";
       previewEl.appendChild(empty);
+      setPreviewTip(0);
+      syncEditorProblems();
       return;
     }
 
@@ -813,6 +916,7 @@
     // Size every page like the first one, so a short last page does not grow its barcodes.
     const layoutCount = Math.min(perPage, usable.length);
     const layoutRows = Math.max(1, Math.ceil(layoutCount / columns));
+    let tooSmallCount = 0;
 
     for (let p = 0; p < pages; p++) {
       const slice = usable.slice(p * perPage, (p + 1) * perPage);
@@ -886,6 +990,30 @@
           return;
         }
 
+        const moduleMm = moduleWidthMm(
+          encoded.value.length,
+          columns,
+          landscape,
+          paper,
+          sizeMode,
+          layoutCount
+        );
+        if (moduleMm < MIN_MODULE_MM) {
+          tooSmallCount += 1;
+          cell.className = "sheet-cell is-bad";
+          appendCellTitle(cell, titlesOn, title);
+          const err = document.createElement("p");
+          err.className = "sheet-cell-error";
+          err.textContent = "Too small to scan.";
+          cell.appendChild(err);
+          const label = document.createElement("p");
+          label.className = "sheet-cell-label";
+          label.textContent = encoded.value;
+          cell.appendChild(label);
+          grid.appendChild(cell);
+          return;
+        }
+
         cell.className = "sheet-cell";
         appendCellTitle(cell, titlesOn, title);
 
@@ -920,7 +1048,7 @@
 
         const label = document.createElement("p");
         label.className = "sheet-cell-label";
-        label.textContent = encoded.label;
+        label.textContent = encoded.value;
         cell.appendChild(label);
         grid.appendChild(cell);
       });
@@ -936,6 +1064,8 @@
 
       previewEl.appendChild(sheet);
     }
+    setPreviewTip(tooSmallCount);
+    syncEditorProblems();
   }
 
   function escapeHtml(s) {
