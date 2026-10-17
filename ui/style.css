@@ -836,13 +836,11 @@ body {
   align-content: center;
 }
 
-.sheet.is-fit .sheet-cell-title,
-.sheet.is-semi .sheet-cell-title {
+.sheet.is-fit .sheet-cell-title {
   font-size: 11pt;
 }
 
-.sheet.is-fit .sheet-cell-label,
-.sheet.is-semi .sheet-cell-label {
+.sheet.is-fit .sheet-cell-label {
   font-size: 8.5pt;
 }
 
@@ -950,33 +948,27 @@ body {
   filter: contrast(1.05);
 }
 
-.sheet.is-fit,
-.sheet.is-semi {
+.sheet.is-fit {
   height: 297mm;
 }
 
-.sheet.is-fit.is-landscape,
-.sheet.is-semi.is-landscape {
+.sheet.is-fit.is-landscape {
   height: 210mm;
 }
 
-.sheet.paper-zebra105.is-fit,
-.sheet.paper-zebra105.is-semi {
+.sheet.paper-zebra105.is-fit {
   height: 250mm;
 }
 
-.sheet.paper-zebra105.is-fit.is-landscape,
-.sheet.paper-zebra105.is-semi.is-landscape {
+.sheet.paper-zebra105.is-fit.is-landscape {
   height: 105mm;
 }
 
-.sheet.is-fit .sheet-footer,
-.sheet.is-semi .sheet-footer {
+.sheet.is-fit .sheet-footer {
   margin-top: 0;
 }
 
-.sheet.is-fit .sheet-grid,
-.sheet.is-semi .sheet-grid {
+.sheet.is-fit .sheet-grid {
   --wall-gap: 10mm;
   flex: 1 1 auto;
   min-height: 0;
@@ -988,29 +980,18 @@ body {
   );
 }
 
-.sheet.paper-zebra105.is-fit .sheet-grid,
-.sheet.paper-zebra105.is-semi .sheet-grid {
+.sheet.paper-zebra105.is-fit .sheet-grid {
   --wall-gap: 6mm;
 }
 
-.sheet.is-fit .sheet-cell,
-.sheet.is-semi .sheet-cell {
+.sheet.is-fit .sheet-cell {
   height: 100%;
   min-height: 0;
-}
-
-.sheet.is-fit .sheet-cell {
   padding: 3mm 2.5mm;
   gap: 2mm;
 }
 
-.sheet.is-semi .sheet-cell {
-  padding: 3mm 3mm;
-  gap: 2.4mm;
-}
-
-.sheet.is-fit .sheet-cell-bars,
-.sheet.is-semi .sheet-cell-bars {
+.sheet.is-fit .sheet-cell-bars {
   flex: 0 0 auto;
   align-self: center;
   align-items: center;
@@ -1021,8 +1002,7 @@ body {
   min-height: 0;
 }
 
-.sheet.is-fit .sheet-cell-bars svg,
-.sheet.is-semi .sheet-cell-bars svg {
+.sheet.is-fit .sheet-cell-bars svg {
   width: auto;
   height: 100%;
   max-width: 100%;
@@ -1353,32 +1333,27 @@ body {
   }
 
   /* Content box after @page margins, so a fitted sheet fills one page. */
-  html.paper-a4.orient-portrait .sheet.is-fit,
-  html.paper-a4.orient-portrait .sheet.is-semi {
+  html.paper-a4.orient-portrait .sheet.is-fit {
     height: 272mm;
     max-height: 272mm;
   }
 
-  html.paper-a4.orient-landscape .sheet.is-fit,
-  html.paper-a4.orient-landscape .sheet.is-semi {
+  html.paper-a4.orient-landscape .sheet.is-fit {
     height: 185mm;
     max-height: 185mm;
   }
 
-  html.paper-zebra105.orient-portrait .sheet.is-fit,
-  html.paper-zebra105.orient-portrait .sheet.is-semi {
+  html.paper-zebra105.orient-portrait .sheet.is-fit {
     height: 241mm;
     max-height: 241mm;
   }
 
-  html.paper-zebra105.orient-landscape .sheet.is-fit,
-  html.paper-zebra105.orient-landscape .sheet.is-semi {
+  html.paper-zebra105.orient-landscape .sheet.is-fit {
     height: 96mm;
     max-height: 96mm;
   }
 
-  .sheet.is-fit,
-  .sheet.is-semi {
+  .sheet.is-fit {
     overflow: hidden;
     break-inside: avoid;
     page-break-inside: avoid;

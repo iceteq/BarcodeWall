@@ -176,7 +176,7 @@
 
   function getSizeMode() {
     const mode = sizeModeSelect.value;
-    if (mode === "semi" || mode === "fit") return mode;
+    if (mode === "fit") return mode;
     return "normal";
   }
 
@@ -193,7 +193,7 @@
       if (typeof s.footer === "string") footerInput.value = s.footer;
       if (typeof s.showTitles === "boolean") showTitlesToggle.checked = s.showTitles;
       if (typeof s.vCenter === "boolean") vCenterToggle.checked = s.vCenter;
-      if (s.sizeMode === "semi" || s.sizeMode === "fit" || s.sizeMode === "normal") {
+      if (s.sizeMode === "fit" || s.sizeMode === "normal") {
         sizeModeSelect.value = s.sizeMode;
       } else if (s.fitToPaper) {
         sizeModeSelect.value = "fit";
@@ -448,33 +448,33 @@
   function cellInnerWidthMm(columns, paper, landscape, mode) {
     const pageW = paper === "zebra105" ? (landscape ? 250 : 105) : landscape ? 297 : 210;
     const pagePad = paper === "zebra105" ? 14 : 24;
-    const spread = mode === "fit" || mode === "semi";
+    const fit = mode === "fit";
     let gap = 8;
-    if (spread) gap = paper === "zebra105" ? 6 : 10;
+    if (fit) gap = paper === "zebra105" ? 6 : 10;
     else if (paper === "zebra105") gap = 5;
     else if (columns >= 4) gap = 5;
     else if (columns >= 3) gap = 6;
-    const cellPad = spread ? 5 : paper === "zebra105" ? 2 : 7;
+    const cellPad = fit ? 5 : paper === "zebra105" ? 2 : 7;
     const inner = pageW - pagePad;
     return (inner - gap * Math.max(0, columns - 1)) / columns - cellPad;
   }
 
   function moduleWidthMm(len, columns, landscape, paper, mode, layoutCount) {
     const rows = Math.max(1, Math.ceil(layoutCount / Math.max(1, columns)));
-    const spread = mode === "fit" || mode === "semi";
+    const fit = mode === "fit";
     const size = barcodeSizeForPage(layoutCount, columns, landscape, paper, mode, len);
     const marginPx = paper === "zebra105" ? 2 : columns >= 3 ? 2 : 4;
-    const barMm = spread ? wallBarHeightMm(rows, mode, paper, landscape) : 0;
-    const modulePx = spread
+    const barMm = fit ? wallBarHeightMm(rows, paper, landscape) : 0;
+    const modulePx = fit
       ? spreadModuleWidth(len, columns, barMm, paper, landscape)
       : size.width;
-    const barHeightPx = spread ? 100 : size.height;
+    const barHeightPx = fit ? 100 : size.height;
     const cellMm = cellInnerWidthMm(columns, paper, landscape, mode);
     const modules = 11 * (len + 3) + 2;
     const svgW = modules * modulePx + marginPx * 2;
     const svgH = Math.max(1, barHeightPx);
     if (!(svgW > 0) || !(modulePx > 0)) return 0;
-    if (spread && barMm > 0) {
+    if (fit && barMm > 0) {
       const widthAtHeight = barMm * (svgW / svgH);
       const shown = Math.min(cellMm, widthAtHeight);
       return (shown / svgW) * modulePx;
@@ -543,14 +543,13 @@
     previewTip.classList.remove("is-warn");
   }
 
-  function wallBarHeightMm(rows, mode, paper, landscape) {
-    const fit = mode === "fit";
+  function wallBarHeightMm(rows, paper, landscape) {
     let h;
-    if (rows <= 1) h = fit ? 42 : 34;
-    else if (rows <= 2) h = fit ? 34 : 28;
-    else if (rows <= 4) h = fit ? 28 : 24;
-    else if (rows <= 6) h = fit ? 20 : 18;
-    else h = fit ? 16 : 14;
+    if (rows <= 1) h = 42;
+    else if (rows <= 2) h = 34;
+    else if (rows <= 4) h = 28;
+    else if (rows <= 6) h = 20;
+    else h = 16;
     if (landscape) h = Math.round(h * 0.72);
     if (paper === "zebra105") h = Math.round(h * (landscape ? 0.62 : 0.85));
     return Math.max(12, h);
@@ -588,12 +587,6 @@
     let width = barcodeWidth(valueLen);
     if (columns >= 4) width = Math.min(width, 1.15);
     else if (columns >= 3) width = Math.min(width, 1.35);
-
-    if (mode === "semi") {
-      // Taller bars than the fixed size, still a normal barcode shape.
-      const height = Math.min(Math.round(baseHeight * 1.7), paper === "zebra105" ? 96 : 128);
-      return { height, width: Math.min(width, 2), hero: false };
-    }
 
     if (mode !== "fit") {
       return { height: baseHeight, width, hero: false };
@@ -912,7 +905,6 @@
 
     const sizeMode = getSizeMode();
     const fit = sizeMode === "fit";
-    const spread = sizeMode === "fit" || sizeMode === "semi";
     // Size every page like the first one, so a short last page does not grow its barcodes.
     const layoutCount = Math.min(perPage, usable.length);
     const layoutRows = Math.max(1, Math.ceil(layoutCount / columns));
@@ -934,7 +926,6 @@
         paper +
         (landscape ? " is-landscape" : "") +
         (fit ? " is-fit" : "") +
-        (sizeMode === "semi" ? " is-semi" : "") +
         (fit && pageSize.hero ? " is-fit-hero" : "");
       sheet.style.animationDelay = `${p * 60}ms`;
 
@@ -950,12 +941,12 @@
 
       const grid = document.createElement("div");
       grid.className =
-        "sheet-grid cols-" + columns + (vCenter() && !spread ? " is-vcenter" : "");
+        "sheet-grid cols-" + columns + (vCenter() && !fit ? " is-vcenter" : "");
       grid.style.setProperty("--layout-rows", String(layoutRows));
-      if (spread) {
+      if (fit) {
         grid.style.setProperty(
           "--bar-h",
-          wallBarHeightMm(layoutRows, sizeMode, paper, landscape) + "mm"
+          wallBarHeightMm(layoutRows, paper, landscape) + "mm"
         );
       }
 
@@ -1023,21 +1014,21 @@
         bars.appendChild(svg);
         cell.appendChild(bars);
         try {
-          const barMm = spread
-            ? wallBarHeightMm(layoutRows, sizeMode, paper, landscape)
+          const barMm = fit
+            ? wallBarHeightMm(layoutRows, paper, landscape)
             : 0;
           JsBarcode(svg, encoded.value, {
             format: "CODE128",
             displayValue: false,
             margin: paper === "zebra105" ? 2 : columns >= 3 ? 2 : 4,
-            height: spread ? 100 : size.height,
-            width: spread
+            height: fit ? 100 : size.height,
+            width: fit
               ? spreadModuleWidth(encoded.value.length, columns, barMm, paper, landscape)
               : size.width,
             background: "transparent",
             lineColor: "#111111",
           });
-          if (spread) svg.setAttribute("preserveAspectRatio", "xMidYMid meet");
+          if (fit) svg.setAttribute("preserveAspectRatio", "xMidYMid meet");
         } catch (err) {
           cell.classList.add("is-bad");
           const fail = document.createElement("p");
