@@ -52,6 +52,8 @@
   let dragFromId = null;
   let focusItemId = null;
   let focusField = "text";
+  // Printed module width for the current Fit-to-paper layout, keyed by code length.
+  let fitModuleMm = new Map();
 
   document.querySelectorAll("[data-hide]").forEach((btn) => {
     btn.addEventListener("click", requestHide);
@@ -434,17 +436,6 @@
     refreshPrintPreviewOnly();
   }
 
-  function spreadModuleWidth(len, columns, barMm, paper, landscape) {
-    const modules = Math.max(40, 11 * (len + 3) + 2);
-    const pageW = paper === "zebra105" ? (landscape ? 250 : 105) : landscape ? 297 : 210;
-    const pad = paper === "zebra105" ? 14 : 24;
-    const gap = paper === "zebra105" ? 6 : 10;
-    const col = (pageW - pad - gap * (columns - 1)) / columns - 8;
-    const maxModulesAcross = (col / Math.max(barMm, 12)) * 100;
-    const w = Math.min(2.1, maxModulesAcross / modules);
-    return Math.max(0.2, Math.round(w * 100) / 100);
-  }
-
   function cellInnerWidthMm(columns, paper, landscape, mode) {
     const pageW = paper === "zebra105" ? (landscape ? 250 : 105) : landscape ? 297 : 210;
     const pagePad = paper === "zebra105" ? 14 : 24;
@@ -460,25 +451,17 @@
   }
 
   function moduleWidthMm(len, columns, landscape, paper, mode, layoutCount) {
-    const rows = Math.max(1, Math.ceil(layoutCount / Math.max(1, columns)));
-    const fit = mode === "fit";
+    if (mode === "fit") {
+      const measured = fitModuleMm.get(len);
+      return measured == null ? MIN_MODULE_MM : measured;
+    }
     const size = barcodeSizeForPage(layoutCount, columns, landscape, paper, mode, len);
     const marginPx = paper === "zebra105" ? 2 : columns >= 3 ? 2 : 4;
-    const barMm = fit ? wallBarHeightMm(rows, paper, landscape) : 0;
-    const modulePx = fit
-      ? spreadModuleWidth(len, columns, barMm, paper, landscape)
-      : size.width;
-    const barHeightPx = fit ? 100 : size.height;
+    const modulePx = size.width;
     const cellMm = cellInnerWidthMm(columns, paper, landscape, mode);
     const modules = 11 * (len + 3) + 2;
     const svgW = modules * modulePx + marginPx * 2;
-    const svgH = Math.max(1, barHeightPx);
     if (!(svgW > 0) || !(modulePx > 0)) return 0;
-    if (fit && barMm > 0) {
-      const widthAtHeight = barMm * (svgW / svgH);
-      const shown = Math.min(cellMm, widthAtHeight);
-      return (shown / svgW) * modulePx;
-    }
     const scale = Math.min(1, cellMm / (svgW * PX_TO_MM));
     return modulePx * scale * PX_TO_MM;
   }
@@ -543,18 +526,6 @@
     previewTip.classList.remove("is-warn");
   }
 
-  function wallBarHeightMm(rows, paper, landscape) {
-    let h;
-    if (rows <= 1) h = 42;
-    else if (rows <= 2) h = 34;
-    else if (rows <= 4) h = 28;
-    else if (rows <= 6) h = 20;
-    else h = 16;
-    if (landscape) h = Math.round(h * 0.72);
-    if (paper === "zebra105") h = Math.round(h * (landscape ? 0.62 : 0.85));
-    return Math.max(12, h);
-  }
-
   function barcodeHeightForLayout(countOnPage, columns, landscape, paper) {
     const rows = Math.max(1, Math.ceil(countOnPage / columns));
     if (paper === "zebra105") {
@@ -581,48 +552,13 @@
     return 30;
   }
 
-  function barcodeSizeForPage(countOnPage, columns, landscape, paper, mode, valueLen) {
-    const rows = Math.max(1, Math.ceil(countOnPage / columns));
+  function barcodeSizeForPage(countOnPage, columns, landscape, paper, _mode, valueLen) {
     const baseHeight = barcodeHeightForLayout(countOnPage, columns, landscape, paper);
     let width = barcodeWidth(valueLen);
     if (columns >= 4) width = Math.min(width, 1.15);
     else if (columns >= 3) width = Math.min(width, 1.35);
 
-    if (mode !== "fit") {
-      return { height: baseHeight, width, hero: false };
-    }
-
-    // Fill most of the band between title and footer; cap so bars stay scannable.
-    let maxH;
-    let minH;
-    if (paper === "zebra105") {
-      maxH = landscape ? 88 : 150;
-      minH = landscape ? 36 : 48;
-    } else {
-      maxH = landscape ? 130 : 175;
-      minH = landscape ? 48 : 56;
-    }
-
-    // Leave room for title + value text + gaps (~22% of slot).
-    let height = Math.floor((maxH / rows) * 0.78);
-    height = Math.max(minH, Math.min(maxH, height));
-    // Never smaller than the normal layout for the same density.
-    height = Math.max(height, baseHeight);
-
-    const hero = rows === 1 && columns === 1;
-    if (hero) {
-      width = Math.min(3.4, Math.max(width * 1.55, 2.4));
-    } else if (rows === 1) {
-      width = Math.min(2.8, Math.max(width * 1.35, 2.0));
-    } else if (rows <= 2) {
-      width = Math.min(2.4, Math.max(width * 1.2, 1.8));
-    } else {
-      width = Math.min(2.1, Math.max(width * 1.1, 1.5));
-    }
-    if (columns >= 3) width = Math.min(width, 1.8);
-    if (columns >= 4) width = Math.min(width, 1.45);
-
-    return { height, width, hero };
+    return { height: baseHeight, width, hero: false };
   }
 
   function friendlyPages(n) {
@@ -874,6 +810,145 @@
     cell.appendChild(t);
   }
 
+  // Scale the title, barcode, and caption together until they fill the tile.
+  // Bar height can grow with that same scale, but only up to twice the symbol
+  // width — taller than that would mean stretching the bars to the tile.
+  function layoutFitTrios() {
+    const FILL = 0.96;
+    const MAX_BAR_RATIO = 2;
+    const TITLE_EM = 0.2;
+    const LABEL_EM = 0.15;
+    const GAP_EM = 0.045;
+    fitModuleMm = new Map();
+    let tooSmall = 0;
+
+    previewEl.querySelectorAll(".sheet.is-fit .sheet-trio").forEach((trio) => {
+      const cell = trio.closest(".sheet-cell");
+      const svg = trio.querySelector("svg");
+      if (!cell || !svg) return;
+      const modules = Number(trio.dataset.modules);
+      const margin = Number(trio.dataset.margin) || 0;
+      const value = trio.dataset.value || "";
+      const titlesOn = trio.dataset.titles === "1";
+      const cs = getComputedStyle(cell);
+      const padX = (parseFloat(cs.paddingLeft) || 0) + (parseFloat(cs.paddingRight) || 0);
+      const padY = (parseFloat(cs.paddingTop) || 0) + (parseFloat(cs.paddingBottom) || 0);
+      const availW = Math.max(0, cell.clientWidth - padX) * FILL;
+      const availH = Math.max(0, cell.clientHeight - padY) * FILL;
+      if (!(availW > 8) || !(availH > 8) || !(modules > 0) || !value) return;
+
+      const gaps = (titlesOn ? 1 : 0) + 1;
+      const titleFactor = titlesOn ? TITLE_EM * 1.2 * 2 : 0;
+      const labelFactor = LABEL_EM * 1.25;
+      const extra = titleFactor + labelFactor + gaps * GAP_EM;
+      const symbolBudget = Math.max(8, availW - margin * 2);
+      let mw = symbolBudget / modules;
+      const maxBh = symbolBudget * MAX_BAR_RATIO;
+      let bh = (availH - margin * 2) / (1 + extra);
+      bh = Math.max(12, Math.min(maxBh, bh));
+
+      const paint = () => {
+        const width = Math.max(0.2, Math.round(mw * 100) / 100);
+        const height = Math.max(8, Math.round(bh));
+        JsBarcode(svg, value, {
+          format: "CODE128",
+          displayValue: false,
+          margin,
+          height,
+          width,
+          background: "transparent",
+          lineColor: "#111111",
+        });
+        const drawnW = svg.width && svg.width.baseVal ? svg.width.baseVal.value : 0;
+        trio.style.gap = bh * GAP_EM + "px";
+        trio.style.width = (drawnW || symbolBudget) + "px";
+        const titleEl = trio.querySelector(".sheet-cell-title");
+        if (titleEl) titleEl.style.fontSize = bh * TITLE_EM + "px";
+        const labelEl = trio.querySelector(".sheet-cell-label");
+        if (labelEl) {
+          // Keep the caption on one line, as large as the symbol width allows.
+          const maxLabel = symbolBudget / Math.max(1, value.length * 0.62);
+          labelEl.style.fontSize = Math.max(8, Math.min(bh * LABEL_EM, maxLabel)) + "px";
+        }
+        return {
+          tw: trio.offsetWidth,
+          th: trio.offsetHeight,
+          moduleMm: width * PX_TO_MM,
+        };
+      };
+
+      let painted;
+      try {
+        painted = paint();
+      } catch (_) {
+        cell.classList.add("is-bad");
+        return;
+      }
+
+      // Code 128 can pack digits tighter than the worst-case module count.
+      const usedW = Math.max(0.2, Math.round(mw * 100) / 100);
+      const drawnW = svg.width && svg.width.baseVal ? svg.width.baseVal.value : 0;
+      if (drawnW > margin * 2 && drawnW < availW * 0.98) {
+        const trueModules = (drawnW - margin * 2) / usedW;
+        if (trueModules > 0) {
+          mw = symbolBudget / trueModules;
+          const bhFit = (availH - margin * 2) / (1 + extra);
+          bh = Math.max(12, Math.min(mw * trueModules * MAX_BAR_RATIO, Math.max(bh, bhFit)));
+          try {
+            painted = paint();
+          } catch (_) {
+            /* keep the previous draw */
+          }
+        }
+      }
+
+      if (painted.th > 0 && painted.th < availH - 1 && bh < maxBh - 0.5) {
+        const labelCapped = bh * LABEL_EM >= symbolBudget / Math.max(1, value.length * 0.62);
+        const grow = labelCapped ? 1 + titleFactor + gaps * GAP_EM : 1 + extra;
+        bh = Math.min(maxBh, bh + (availH - painted.th) / grow);
+        try {
+          painted = paint();
+        } catch (_) {
+          /* keep the previous draw */
+        }
+      }
+
+      if (painted.tw > availW + 0.5 || painted.th > availH + 0.5) {
+        const s = Math.min(availW / Math.max(painted.tw, 1), availH / Math.max(painted.th, 1));
+        if (s > 0 && s < 1) {
+          bh *= s;
+          mw *= s;
+          try {
+            painted = paint();
+          } catch (_) {
+            /* keep the previous draw */
+          }
+        }
+      }
+
+      const prev = fitModuleMm.get(value.length);
+      if (prev == null || painted.moduleMm < prev) fitModuleMm.set(value.length, painted.moduleMm);
+      if (painted.moduleMm >= MIN_MODULE_MM) return;
+
+      tooSmall += 1;
+      const titleEl = trio.querySelector(".sheet-cell-title");
+      const titleText = titleEl ? titleEl.textContent : "";
+      cell.className = "sheet-cell is-bad";
+      cell.replaceChildren();
+      appendCellTitle(cell, titlesOn, titleText && titleText.trim() ? titleText : "");
+      const err = document.createElement("p");
+      err.className = "sheet-cell-error";
+      err.textContent = "Too small to scan.";
+      cell.appendChild(err);
+      const label = document.createElement("p");
+      label.className = "sheet-cell-label";
+      label.textContent = value;
+      cell.appendChild(label);
+    });
+
+    return tooSmall;
+  }
+
   function refreshPrintPreviewOnly() {
     saveItems();
     const usable = printItems.filter((i) => i.text.trim());
@@ -894,6 +969,7 @@
     previewEl.innerHTML = "";
 
     if (!usable.length) {
+      fitModuleMm = new Map();
       const empty = document.createElement("p");
       empty.className = "preview-empty";
       empty.textContent = "Click Import to paste a list — or add codes on the left.";
@@ -922,11 +998,7 @@
       );
       const sheet = document.createElement("div");
       sheet.className =
-        "sheet paper-" +
-        paper +
-        (landscape ? " is-landscape" : "") +
-        (fit ? " is-fit" : "") +
-        (fit && pageSize.hero ? " is-fit-hero" : "");
+        "sheet paper-" + paper + (landscape ? " is-landscape" : "") + (fit ? " is-fit" : "");
       sheet.style.animationDelay = `${p * 60}ms`;
 
       const header = document.createElement("div");
@@ -943,12 +1015,6 @@
       grid.className =
         "sheet-grid cols-" + columns + (vCenter() && !fit ? " is-vcenter" : "");
       grid.style.setProperty("--layout-rows", String(layoutRows));
-      if (fit) {
-        grid.style.setProperty(
-          "--bar-h",
-          wallBarHeightMm(layoutRows, paper, landscape) + "mm"
-        );
-      }
 
       slice.forEach((item) => {
         const text = item.text.trim();
@@ -981,66 +1047,72 @@
           return;
         }
 
-        const moduleMm = moduleWidthMm(
-          encoded.value.length,
-          columns,
-          landscape,
-          paper,
-          sizeMode,
-          layoutCount
-        );
-        if (moduleMm < MIN_MODULE_MM) {
-          tooSmallCount += 1;
-          cell.className = "sheet-cell is-bad";
-          appendCellTitle(cell, titlesOn, title);
-          const err = document.createElement("p");
-          err.className = "sheet-cell-error";
-          err.textContent = "Too small to scan.";
-          cell.appendChild(err);
-          const label = document.createElement("p");
-          label.className = "sheet-cell-label";
-          label.textContent = encoded.value;
-          cell.appendChild(label);
-          grid.appendChild(cell);
-          return;
+        const marginPx = paper === "zebra105" ? 2 : columns >= 3 ? 2 : 4;
+        if (!fit) {
+          const moduleMm = moduleWidthMm(
+            encoded.value.length,
+            columns,
+            landscape,
+            paper,
+            sizeMode,
+            layoutCount
+          );
+          if (moduleMm < MIN_MODULE_MM) {
+            tooSmallCount += 1;
+            cell.className = "sheet-cell is-bad";
+            appendCellTitle(cell, titlesOn, title);
+            const err = document.createElement("p");
+            err.className = "sheet-cell-error";
+            err.textContent = "Too small to scan.";
+            cell.appendChild(err);
+            const label = document.createElement("p");
+            label.className = "sheet-cell-label";
+            label.textContent = encoded.value;
+            cell.appendChild(label);
+            grid.appendChild(cell);
+            return;
+          }
         }
 
         cell.className = "sheet-cell";
-        appendCellTitle(cell, titlesOn, title);
+        const parent = fit ? document.createElement("div") : cell;
+        if (fit) {
+          parent.className = "sheet-trio";
+          parent.dataset.value = encoded.value;
+          parent.dataset.modules = String(11 * (encoded.value.length + 3) + 2);
+          parent.dataset.margin = String(marginPx);
+          parent.dataset.titles = titlesOn ? "1" : "0";
+        }
+        appendCellTitle(parent, titlesOn, title);
 
         const bars = document.createElement("div");
         bars.className = "sheet-cell-bars";
         const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
         bars.appendChild(svg);
-        cell.appendChild(bars);
+        parent.appendChild(bars);
         try {
-          const barMm = fit
-            ? wallBarHeightMm(layoutRows, paper, landscape)
-            : 0;
           JsBarcode(svg, encoded.value, {
             format: "CODE128",
             displayValue: false,
-            margin: paper === "zebra105" ? 2 : columns >= 3 ? 2 : 4,
-            height: fit ? 100 : size.height,
-            width: fit
-              ? spreadModuleWidth(encoded.value.length, columns, barMm, paper, landscape)
-              : size.width,
+            margin: marginPx,
+            height: size.height,
+            width: size.width,
             background: "transparent",
             lineColor: "#111111",
           });
-          if (fit) svg.setAttribute("preserveAspectRatio", "xMidYMid meet");
         } catch (err) {
           cell.classList.add("is-bad");
           const fail = document.createElement("p");
           fail.className = "sheet-cell-error";
           fail.textContent = err && err.message ? err.message : String(err);
-          cell.appendChild(fail);
+          parent.appendChild(fail);
         }
 
         const label = document.createElement("p");
         label.className = "sheet-cell-label";
         label.textContent = encoded.value;
-        cell.appendChild(label);
+        parent.appendChild(label);
+        if (fit) cell.appendChild(parent);
         grid.appendChild(cell);
       });
 
@@ -1055,6 +1127,7 @@
 
       previewEl.appendChild(sheet);
     }
+    if (fit) tooSmallCount += layoutFitTrios();
     setPreviewTip(tooSmallCount);
     syncEditorProblems();
   }
@@ -1222,6 +1295,13 @@
     syncSizeSegments();
     saveSettings();
     refreshPrintPreviewOnly();
+  });
+
+  window.addEventListener("beforeprint", () => {
+    if (getSizeMode() === "fit" && !viewPrint.hidden) layoutFitTrios();
+  });
+  window.addEventListener("afterprint", () => {
+    if (getSizeMode() === "fit" && !viewPrint.hidden) refreshPrintPreviewOnly();
   });
 
   function applyPayload(text, mode) {

@@ -836,30 +836,6 @@ body {
   align-content: center;
 }
 
-.sheet.is-fit .sheet-cell-title {
-  font-size: 11pt;
-}
-
-.sheet.is-fit .sheet-cell-label {
-  font-size: 8.5pt;
-}
-
-.sheet.is-fit.paper-zebra105 .sheet-cell-title {
-  font-size: 10pt;
-}
-
-.sheet.is-fit.paper-zebra105 .sheet-cell-label {
-  font-size: 9pt;
-}
-
-.sheet.is-fit.is-fit-hero .sheet-cell-title {
-  font-size: 14pt;
-}
-
-.sheet.is-fit.is-fit-hero .sheet-cell-label {
-  font-size: 9pt;
-}
-
 .sheet.paper-zebra105 .sheet-grid {
   gap: 4mm 5mm;
 }
@@ -988,24 +964,41 @@ body {
   height: 100%;
   min-height: 0;
   padding: 3mm 2.5mm;
-  gap: 2mm;
+  gap: 0;
+}
+
+.sheet.is-fit .sheet-trio {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.sheet.is-fit .sheet-trio .sheet-cell-title {
+  height: auto;
+  max-height: 2.4em;
+}
+
+.sheet.is-fit .sheet-trio .sheet-cell-label {
+  white-space: nowrap;
 }
 
 .sheet.is-fit .sheet-cell-bars {
   flex: 0 0 auto;
   align-self: center;
-  align-items: center;
-  justify-content: center;
-  width: 100%;
-  height: var(--bar-h, 24mm);
+  width: auto;
+  height: auto;
   max-width: none;
   min-height: 0;
 }
 
 .sheet.is-fit .sheet-cell-bars svg {
   width: auto;
-  height: 100%;
-  max-width: 100%;
+  height: auto;
+  max-width: none;
   display: block;
 }
 
